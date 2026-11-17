@@ -10,14 +10,6 @@ __pycache__/
 data/raw/
 data/interim/
 
-# local design-tool notes (not part of the project)
-PRODUCT.md
-DESIGN.md
-DESIGN.json
-.impeccable/
-.claude/
-CLAUDE.md
-
 # old v1 local artifacts
 data/pitching_data.db
 data/processed/
