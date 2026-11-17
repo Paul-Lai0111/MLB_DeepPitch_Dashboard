@@ -1,0 +1,5 @@
+# Everything needed to rebuild the data from Baseball Savant and retrain the model.
+-r requirements.txt
+pybaseball==2.2.7
+lightgbm==4.7.0
+pytest==9.2.0

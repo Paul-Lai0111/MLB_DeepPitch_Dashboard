@@ -1,0 +1,185 @@
+<div class="fl" id="fl">
+  <canvas id="cv" aria-label="Animated pitch flight, side view and catcher's view"></canvas>
+  <div class="key" id="key"></div>
+  <div class="bar">
+    <button id="play" type="button" aria-label="Play">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path id="ico" d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>
+      <span id="playlbl">Throw</span>
+    </button>
+    <div class="speed" role="group" aria-label="Playback speed">
+      <button type="button" data-s="1">1×</button>
+      <button type="button" data-s="0.1" class="on">⅒×</button>
+      <button type="button" data-s="0.03">1⁄30×</button>
+    </div>
+    <label class="ghost"><input type="checkbox" id="ghost" checked> <span id="ghostlbl">No-spin path</span></label>
+    <input id="scrub" type="range" min="0" max="1000" value="1000" aria-label="Scrub through the flight">
+    <output id="clock">0 ms</output>
+  </div>
+</div>
+<style>
+  :root{--paper:#F3F5EF;--rule:#2E6A4E;--ink:#26292B;--muted:#5C625E;--red:#C7352B;--blue:#2350A0}
+  *{box-sizing:border-box}
+  body{margin:0;background:transparent;font-family:Barlow,"Noto Sans TC",system-ui,sans-serif;color:var(--ink)}
+  .fl{width:100%}
+  canvas{width:100%;display:block;border-top:1.5px solid var(--rule);border-bottom:1px solid rgba(46,106,78,.35);background:var(--paper)}
+  .key{display:flex;flex-wrap:wrap;gap:4px 16px;padding:8px 2px 0;font:500 13px Barlow,"Noto Sans TC",sans-serif;color:var(--ink)}
+  .key span{display:inline-flex;align-items:center;gap:6px}
+  .key i{width:10px;height:10px;border-radius:50%;border:2px solid;background:#fff;display:inline-block}
+  .bar{display:flex;align-items:center;gap:14px;padding:10px 2px 2px;flex-wrap:wrap}
+  button{font:600 13px/1 Barlow,"Noto Sans TC",sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);background:transparent;border:1px solid var(--ink);border-radius:2px;padding:7px 11px;cursor:pointer;display:inline-flex;gap:7px;align-items:center;transition:background .15s,color .15s}
+  button:hover{background:var(--ink);color:var(--paper)}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  #play{background:var(--red);border-color:var(--red);color:#fff}
+  #play:hover{background:#A92A21}
+  .speed{display:inline-flex}
+  .speed button{border-radius:0;margin-left:-1px;text-transform:none}
+  .speed button.on{background:var(--ink);color:var(--paper)}
+  .ghost{font:500 13px Barlow,"Noto Sans TC",sans-serif;color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer}
+  .ghost input{accent-color:var(--ink)}
+  #scrub{flex:1;min-width:140px;accent-color:var(--red)}
+  output{font:600 13px Barlow,sans-serif;font-variant-numeric:tabular-nums;min-width:62px;text-align:right}
+</style>
+<script>
+const DATA = __DATA__;
+const L = DATA.labels || {};
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const scrub = document.getElementById('scrub'), clock = document.getElementById('clock');
+const playBtn = document.getElementById('play'), ico = document.getElementById('ico');
+document.getElementById('playlbl').textContent = L.throw || 'Throw';
+document.getElementById('ghostlbl').textContent = L.ghost || 'No-spin path';
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.getElementById('key').innerHTML = DATA.pitches.map(p=>`<span><i style="border-color:${p.color}"></i>${p.label}</span>`).join('');
+let speed = 0.1, playing = false, t = 1, last = 0, showGhost = true;
+const P = DATA.pitches;                       // [{label,color,pts:[[t,x,y,z]...],ghost:[[x,z]...]}]
+const T = Math.max(...P.map(p => p.pts[p.pts.length-1][0]));
+const DEC = DATA.decision ?? 0.175;
+const zone = DATA.zone || {top:3.4,bot:1.6};
+
+function size(){
+  const w = cv.parentElement.clientWidth, narrow = w < 640;
+  const h = narrow ? 380 : (DATA.canvasH || 440);
+  const dpr = window.devicePixelRatio||1;
+  cv.width = w*dpr; cv.height = h*dpr; cv.style.height = h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  cv._w=w; cv._h=h; cv._narrow=narrow; draw();
+}
+function lerpPt(p, tt){
+  const a = p.pts; if (tt <= a[0][0]) return a[0];
+  for (let i=1;i<a.length;i++){ if (a[i][0] >= tt){ const f=(tt-a[i-1][0])/(a[i][0]-a[i-1][0]); return a[i-1].map((v,k)=>v+(a[i][k]-v)*f);} }
+  return a[a.length-1];
+}
+function idxAt(p, tt){ let i=0; while(i<p.pts.length-1 && p.pts[i+1][0]<=tt) i++; return i; }
+
+function pencil(path, color, width, alpha){
+  // two slightly offset passes read as graphite on paper, not a vector stroke
+  for (const [dx,dy,a] of [[0,0,alpha],[0.6,0.4,alpha*0.35]]){
+    ctx.beginPath(); path.forEach(([x,y],i)=> i?ctx.lineTo(x+dx,y+dy):ctx.moveTo(x+dx,y+dy));
+    ctx.strokeStyle=color; ctx.globalAlpha=a; ctx.lineWidth=width; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+function label(txt,x,y,opt={}){
+  ctx.font = (opt.weight||500)+' '+(opt.size||12)+'px Barlow, "Noto Sans TC", sans-serif';
+  ctx.fillStyle = opt.color||'#5C625E'; ctx.textAlign = opt.align||'left'; ctx.textBaseline = opt.base||'alphabetic';
+  if (opt.caps){ txt = txt.toUpperCase(); ctx.letterSpacing = '0.06em'; } else ctx.letterSpacing='0px';
+  ctx.fillText(txt,x,y);
+}
+
+function draw(){
+  const W=cv._w, H=cv._h, narrow=cv._narrow; ctx.clearRect(0,0,W,H);
+  // ledger rules
+  ctx.strokeStyle='rgba(46,106,78,.10)'; ctx.lineWidth=1;
+  for (let y=28;y<H;y+=28){ ctx.beginPath(); ctx.moveTo(0,y+.5); ctx.lineTo(W,y+.5); ctx.stroke(); }
+  const pad=16;
+  const side = narrow ? {x:pad,y:30,w:W-2*pad,h:H*0.36} : {x:pad,y:34,w:W*0.64-pad,h:H-66};
+  const cat  = narrow ? {x:pad,y:30+H*0.36+62,w:W-2*pad,h:H-(30+H*0.36+62)-22} : {x:W*0.64+pad*1.5,y:34,w:W*0.36-pad*2.5,h:H-66};
+  if (!narrow){ ctx.strokeStyle='rgba(199,53,43,.55)'; ctx.beginPath(); ctx.moveTo(W*0.64+.5,8); ctx.lineTo(W*0.64+.5,H-8); ctx.stroke(); }
+  label(L.side||'Side view · rubber to plate', side.x, 20, {caps:true,weight:600,size:11});
+  label(L.catcher||"Catcher's view", cat.x, narrow? cat.y-16 : 20, {caps:true,weight:600,size:11});
+
+  // ---- side view: y 60.5 -> 0 left to right, z 0..7
+  const sx = y => side.x + (60.5 - y)/60.5*side.w;
+  const zmax = 7.2, sz = z => side.y + side.h - z/zmax*side.h;
+  // ground, rubber, plate
+  ctx.strokeStyle='#26292B'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(side.x, sz(0)); ctx.lineTo(side.x+side.w, sz(0)); ctx.stroke();
+  for (const [ft,txt] of [[60.5,'60.5 ft'],[40,'40'],[20,'20'],[0,L.plate||'plate']]){
+    ctx.beginPath(); ctx.moveTo(sx(ft), sz(0)); ctx.lineTo(sx(ft), sz(0)+5); ctx.stroke();
+    label(txt, sx(ft), sz(0)+18, {align: ft===60.5?'left':ft===0?'right':'center', size:11});
+  }
+  // strike zone slab at plate
+  ctx.fillStyle='rgba(35,80,160,.08)'; ctx.fillRect(sx(1.4)-4, sz(zone.top), 8, sz(zone.bot)-sz(zone.top));
+  // decision line: where the lead pitch is DEC s before arriving
+  const lead = P[0], tPlate = lead.pts[lead.pts.length-1][0], dPt = lerpPt(lead, tPlate-DEC);
+  ctx.setLineDash([4,4]); ctx.strokeStyle='#C7352B'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(sx(dPt[2]), side.y); ctx.lineTo(sx(dPt[2]), sz(0)); ctx.stroke(); ctx.setLineDash([]);
+  label((L.commit||'Commit point')+' · '+Math.round(dPt[2])+' ft', sx(dPt[2])+5, side.y+10, {color:'#C7352B',weight:600,size:11});
+
+  // ---- catcher view: x -2.5..2.5 (catcher perspective), z 0..6.5
+  const cs = Math.min(cat.w/5, cat.h/6.5), ccx = cat.x+cat.w/2, cbase = cat.y+cat.h;
+  const cxp = x => ccx + x*cs, czp = z => cbase - z*cs;
+  ctx.strokeStyle='#26292B'; ctx.lineWidth=1.4;
+  ctx.strokeRect(cxp(-17/24), czp(zone.top), (17/12)*cs, (zone.top-zone.bot)*cs);
+  ctx.lineWidth=.6; ctx.strokeStyle='rgba(38,41,43,.35)';
+  for (let i=1;i<3;i++){ const x=-17/24+i*17/36; ctx.beginPath(); ctx.moveTo(cxp(x),czp(zone.top)); ctx.lineTo(cxp(x),czp(zone.bot)); ctx.stroke();
+    const z=zone.bot+i*(zone.top-zone.bot)/3; ctx.beginPath(); ctx.moveTo(cxp(-17/24),czp(z)); ctx.lineTo(cxp(17/24),czp(z)); ctx.stroke(); }
+  // home plate pentagon
+  ctx.fillStyle='#fff'; ctx.strokeStyle='#26292B'; ctx.lineWidth=1; ctx.beginPath();
+  const py=cbase+6; ctx.moveTo(cxp(-17/24),py); ctx.lineTo(cxp(17/24),py); ctx.lineTo(cxp(17/24),py+4); ctx.lineTo(ccx,py+9); ctx.lineTo(cxp(-17/24),py+4); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  const tt = t*T;
+  P.forEach((p,k)=>{
+    const i = idxAt(p, tt), now = lerpPt(p, tt);
+    const sPath = p.pts.slice(0,i+1).map(q=>[sx(q[2]), sz(q[3])]).concat([[sx(now[2]), sz(now[3])]]);
+    const cPath = p.pts.slice(0,i+1).map(q=>[cxp(q[1]), czp(q[3])]).concat([[cxp(now[1]), czp(now[3])]]);
+    if (showGhost && p.ghost){
+      const g = p.ghost.slice(0, i+1);
+      ctx.setLineDash([2,5]);
+      pencil(g.map((q,j)=>[sx(p.pts[j][2]), sz(q[1])]), p.color, 1.2, .55);
+      pencil(g.map(q=>[cxp(q[0]), czp(q[1])]), p.color, 1.2, .55);
+      ctx.setLineDash([]);
+    }
+    pencil(sPath, p.color, 2.2, .95);
+    pencil(cPath, p.color, 2.2, .95);
+    // ball: grows as it approaches the catcher (perspective cue)
+    const dist = Math.max(now[2], 1.4), r = Math.max(3.5, Math.min(12, 0.121*cs*60/(dist*1.6)));
+    for (const [x,y,rr] of [[sx(now[2]), sz(now[3]), 4.5],[cxp(now[1]), czp(now[3]), r]]){
+      ctx.beginPath(); ctx.arc(x,y,rr,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle=p.color; ctx.stroke();
+    }
+    if (false){
+      const end = p.pts[p.pts.length-1];
+      label(p.label, cxp(end[1])+ (k%2? -r-6 : r+6), czp(end[3])+4, {align: k%2?'right':'left', color:'#26292B', weight:600, size:12});
+    }
+  });
+  // commit flash
+  const msLeft = (tPlate - tt)*1000;
+  if (msLeft <= DEC*1000 && msLeft > DEC*1000-70 && playing){
+    ctx.fillStyle='rgba(199,53,43,.10)'; ctx.fillRect(0,0,W,H);
+  }
+  clock.textContent = Math.round(tt*1000)+' ms';
+  if (!playing) scrub.value = Math.round(t*1000);
+}
+function frame(ts){
+  if (!playing) return;
+  const dt = last? (ts-last)/1000 : 0; last = ts;
+  t = Math.min(1, t + dt*speed/T);
+  draw();
+  if (t>=1){ playing=false; ico.setAttribute('d','M4 2.5v11l9-5.5z'); scrub.value=1000; return; }
+  scrub.value = Math.round(t*1000);
+  requestAnimationFrame(frame);
+}
+playBtn.onclick = () => {
+  if (playing){ playing=false; ico.setAttribute('d','M4 2.5v11l9-5.5z'); return; }
+  if (t>=1) t=0;
+  if (reduce){ t=1; draw(); return; }
+  playing=true; last=0; ico.setAttribute('d','M4 2.5h3v11H4zM9 2.5h3v11H9z'); requestAnimationFrame(frame);
+};
+document.querySelectorAll('.speed button').forEach(b=> b.onclick=()=>{
+  document.querySelectorAll('.speed button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); speed=+b.dataset.s; });
+document.getElementById('ghost').onchange = e => { showGhost = e.target.checked; draw(); };
+scrub.oninput = () => { playing=false; ico.setAttribute('d','M4 2.5v11l9-5.5z'); t = scrub.value/1000; draw(); };
+new ResizeObserver(size).observe(cv.parentElement);
+document.fonts && document.fonts.ready.then(draw);
+size();
+if (DATA.autoplay && !reduce){ setTimeout(()=>playBtn.click(), 450); }
+</script>

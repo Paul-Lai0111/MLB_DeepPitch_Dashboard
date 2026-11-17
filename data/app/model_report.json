@@ -1,0 +1,145 @@
+{
+  "features": [
+    "Velocity",
+    "Spin rate",
+    "Spin efficiency",
+    "Induced vertical break",
+    "Horizontal break",
+    "Extension",
+    "Release height",
+    "Release side",
+    "Arm angle",
+    "Seam-shifted wake",
+    "Velo gap vs fastball",
+    "Rise gap vs fastball",
+    "Run gap vs fastball",
+    "Pitch type",
+    "Same-hand matchup"
+  ],
+  "seasons": [
+    2024,
+    2025,
+    2026
+  ],
+  "folds": [
+    {
+      "test_season": 2024,
+      "train_seasons": [
+        2025,
+        2026
+      ],
+      "mse_reduction_pct": 0.054,
+      "pitch_level_corr": 0.0249
+    },
+    {
+      "test_season": 2025,
+      "train_seasons": [
+        2024,
+        2026
+      ],
+      "mse_reduction_pct": 0.063,
+      "pitch_level_corr": 0.0263
+    },
+    {
+      "test_season": 2026,
+      "train_seasons": [
+        2024,
+        2025
+      ],
+      "mse_reduction_pct": 0.076,
+      "pitch_level_corr": 0.0282
+    }
+  ],
+  "importance": [
+    {
+      "feature": "Velocity",
+      "key": "release_speed",
+      "mean_abs_shap": 0.0026088446181884713
+    },
+    {
+      "feature": "Seam-shifted wake",
+      "key": "ssw_deg",
+      "mean_abs_shap": 0.0019185803270171334
+    },
+    {
+      "feature": "Spin efficiency",
+      "key": "spin_eff",
+      "mean_abs_shap": 0.0017406418081785645
+    },
+    {
+      "feature": "Spin rate",
+      "key": "release_spin_rate",
+      "mean_abs_shap": 0.0014312501984488006
+    },
+    {
+      "feature": "Horizontal break",
+      "key": "hb",
+      "mean_abs_shap": 0.0012991482566598498
+    },
+    {
+      "feature": "Same-hand matchup",
+      "key": "same_hand",
+      "mean_abs_shap": 0.0012492605491735158
+    },
+    {
+      "feature": "Induced vertical break",
+      "key": "ivb",
+      "mean_abs_shap": 0.0011950873621699796
+    },
+    {
+      "feature": "Velo gap vs fastball",
+      "key": "velo_diff",
+      "mean_abs_shap": 0.001194297422781728
+    },
+    {
+      "feature": "Rise gap vs fastball",
+      "key": "ivb_diff",
+      "mean_abs_shap": 0.0009656204647270481
+    },
+    {
+      "feature": "Pitch type",
+      "key": "pitch_type_code",
+      "mean_abs_shap": 0.0008502514059527576
+    },
+    {
+      "feature": "Run gap vs fastball",
+      "key": "hb_diff",
+      "mean_abs_shap": 0.0008001920651555291
+    },
+    {
+      "feature": "Release height",
+      "key": "release_pos_z",
+      "mean_abs_shap": 0.0007879531813533756
+    },
+    {
+      "feature": "Arm angle",
+      "key": "arm_angle",
+      "mean_abs_shap": 0.0007779433960156105
+    },
+    {
+      "feature": "Release side",
+      "key": "release_side",
+      "mean_abs_shap": 0.0007423242742032918
+    },
+    {
+      "feature": "Extension",
+      "key": "release_extension",
+      "mean_abs_shap": 0.000605538250061913
+    }
+  ],
+  "validity": {
+    "pairs": 640,
+    "stuff_vs_next_rv100": 0.447,
+    "stuff_vs_next_whiff": 0.429,
+    "rv100_vs_next_rv100": 0.192,
+    "rv100_vs_next_whiff": 0.296,
+    "velo_vs_next_rv100": 0.216,
+    "velo_vs_next_whiff": 0.413,
+    "whiff_rate_vs_next_rv100": 0.24,
+    "whiff_rate_vs_next_whiff": 0.75,
+    "stuff_year_to_year": 0.757,
+    "rv100_year_to_year": 0.192,
+    "same_season_stuff_vs_rv100": 0.329,
+    "same_season_stuff_vs_whiff": 0.433
+  }
+}

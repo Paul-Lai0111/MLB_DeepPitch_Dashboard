@@ -1,9 +1,23 @@
+# environments
 .venv/
 __pycache__/
 *.pyc
-models/*.onnx
-.vscode/
-data/*.parquet
-data/*.csv
-view_count.txt
+.pytest_cache/
 .DS_Store
+.vscode/
+
+# large local data (rebuild with `python -m pipeline.run`)
+data/raw/
+data/interim/
+
+# local design-tool notes (not part of the project)
+PRODUCT.md
+DESIGN.md
+DESIGN.json
+.impeccable/
+.claude/
+CLAUDE.md
+
+# old v1 local artifacts
+data/pitching_data.db
+data/processed/
